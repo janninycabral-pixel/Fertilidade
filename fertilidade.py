@@ -158,16 +158,6 @@ def init_session_state():
         st.session_state.usa_bioinsumos = None
     if 'dados_salvos' not in st.session_state:
         st.session_state.dados_salvos = False
-    if 'cultura_escolhida' not in st.session_state:
-        st.session_state.cultura_escolhida = 'Milho'
-    if 'produtividade' not in st.session_state:
-        st.session_state.produtividade = 6000
-    if 'ambiente' not in st.session_state:
-        st.session_state.ambiente = 'Irrigado'
-    if 'leguminosa' not in st.session_state:
-        st.session_state.leguminosa = 'Não'
-    if 'cultura_anterior' not in st.session_state:
-        st.session_state.cultura_anterior = 'Soja'
 
 def get_valores_padrao():
     """Retorna valores médios de fertilidade para fins educativos."""
@@ -890,7 +880,7 @@ with tab2:
             outro_consorcio = None
             
             if sistema == "Consorciado":
-                # CORREÇÃO: Lista de opções com validação
+                # Lista de opções com validação
                 opcoes_tipo_consorcio = [
                     "Milho + braquiária",
                     "Soja + braquiária",
@@ -1019,13 +1009,13 @@ with tab3:
         col1, col2 = st.columns(2)
         
         with col1:
+            # CORREÇÃO: Removida a atribuição manual do session_state
             cultura_escolhida = st.selectbox(
                 "Cultura que pretende cultivar*",
                 ["Milho", "Trigo", "Soja", "Feijão", "Sorgo", "Algodão"],
                 index=0,
                 key="cultura_escolhida"
             )
-            st.session_state.cultura_escolhida = cultura_escolhida
             
             unidade_prod = st.selectbox(
                 "Unidade de produtividade",
@@ -1045,7 +1035,6 @@ with tab3:
                     help="Exemplo: 6000 kg/ha para milho",
                     key="produtividade_kg"
                 )
-                st.session_state.produtividade = produtividade
             else:
                 # Converter sacas para kg (assumindo 60kg por saca para maioria)
                 produtividade_sacas = st.number_input(
@@ -1058,7 +1047,6 @@ with tab3:
                     key="produtividade_sacas"
                 )
                 produtividade = produtividade_sacas * 60  # kg/ha
-                st.session_state.produtividade = produtividade
         
         with col2:
             ambiente = st.selectbox(
@@ -1068,7 +1056,6 @@ with tab3:
                 help="Irrigado = com irrigação disponível | Sequeiro = sem irrigação",
                 key="ambiente"
             )
-            st.session_state.ambiente = ambiente
             
             leguminosa = st.selectbox(
                 "Possui palhada ou cultura anterior leguminosa?",
@@ -1077,7 +1064,6 @@ with tab3:
                 help="Leguminosas fixam nitrogênio, reduzindo a necessidade de adubação",
                 key="leguminosa"
             )
-            st.session_state.leguminosa = leguminosa
             
             cultura_anterior = st.selectbox(
                 "Cultura anterior*",
@@ -1085,7 +1071,6 @@ with tab3:
                 index=0,
                 key="cultura_anterior"
             )
-            st.session_state.cultura_anterior = cultura_anterior
             
             outra_cultura_anterior = ""
             if cultura_anterior == "Outra":
