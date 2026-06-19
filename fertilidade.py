@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -404,64 +405,72 @@ def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
         'Cor': ['#d32f2f', '#ff9800', '#4caf50', '#2e7d32']
     })
     
-    # Criar gráfico com Altair
+    # Criar gráfico de barras
     chart = alt.Chart(dados).mark_bar(
         cornerRadiusTopLeft=5,
         cornerRadiusTopRight=5,
         size=50
     ).encode(
-        x=alt.X('Cenário', sort=None, axis=alt.Axis(labelAngle=0)),
+        x=alt.X('Cenário', sort=None, axis=alt.Axis(labelAngle=0, labelFontSize=12)),
         y=alt.Y('Produtividade (kg/ha)', 
-                 axis=alt.Axis(grid=True, gridColor='#e0e0e0'),
+                 axis=alt.Axis(grid=True, gridColor='#e0e0e0', titleFontSize=13, titleFontWeight='bold'),
                  scale=alt.Scale(domain=[0, max(dados['Produtividade (kg/ha)']) * 1.15])),
         color=alt.Color('Cor', scale=None, legend=None),
         tooltip=['Cenário', 'Produtividade (kg/ha)']
+    )
+    
+    # Criar camada de texto com os valores
+    text = alt.Chart(dados).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5,
+        fontSize=11,
+        fontWeight='bold',
+        color='black'
+    ).encode(
+        x=alt.X('Cenário', sort=None),
+        y=alt.Y('Produtividade (kg/ha)'),
+        text=alt.Text('Produtividade (kg/ha):Q', format='.0f')
+    )
+    
+    # Criar DataFrame para anotação
+    annotation_data = pd.DataFrame({
+        'x': [0.5],
+        'y': [-0.10],
+        'texto': ['* Valores são simulações educativas, não substituem avaliações de campo']
+    })
+    
+    # Criar camada de anotação
+    annotation = alt.Chart(annotation_data).mark_text(
+        align='center',
+        fontSize=10,
+        color='#666666',
+        fontStyle='italic'
+    ).encode(
+        x=alt.X('x:Q', scale=alt.Scale(domain=[0, 1]), axis=None),
+        y=alt.Y('y:Q', scale=alt.Scale(domain=[-0.15, 1]), axis=None),
+        text='texto:N'
+    )
+    
+    # Combinar todas as camadas usando alt.layer
+    final_chart = alt.layer(
+        chart,
+        text,
+        annotation
     ).properties(
         title=alt.Title(
             f'Estimativa educativa de produtividade - {cultura}',
             fontSize=16,
             fontWeight='bold'
         ),
-        width=600,
-        height=400
+        width=700,
+        height=450
+    ).configure_view(
+        strokeWidth=0
     ).configure_axis(
         labelFontSize=12,
         titleFontSize=13,
         titleFontWeight='bold'
-    ).configure_view(
-        strokeWidth=0
-    )
-    
-    # Adicionar rótulos de valor
-    text = chart.mark_text(
-        align='center',
-        baseline='bottom',
-        dy=-5,
-        fontSize=11,
-        fontWeight='bold'
-    ).encode(
-        text=alt.Text('Produtividade (kg/ha):Q', format='.0f')
-    )
-    
-    # Adicionar anotação
-    annotation = alt.Chart(pd.DataFrame({
-        'x': [0.5],
-        'y': [-0.12],
-        'text': ['* Valores são simulações educativas, não substituem avaliações de campo']
-    })).mark_text(
-        align='center',
-        fontSize=10,
-        color='#666666',
-        fontStyle='italic'
-    ).encode(
-        x='x:Q',
-        y='y:Q',
-        text='text:N'
-    )
-    
-    final_chart = (chart + text + annotation).properties(
-        width=700,
-        height=450
     )
     
     return final_chart
