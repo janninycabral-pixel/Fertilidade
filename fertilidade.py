@@ -1,7 +1,9 @@
 # app.py
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
 import random
 import math
 
@@ -39,6 +41,9 @@ st.markdown("""
         color: white;
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         transform: translateY(-2px);
+    }
+    .stButton > button:focus {
+        box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.3);
     }
     .card {
         background-color: white;
@@ -114,6 +119,18 @@ st.markdown("""
         font-size: 0.8rem;
         display: inline-block;
         margin: 5px 0;
+    }
+    .stMetric {
+        background-color: white;
+        padding: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    [data-testid="stMetric"] {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -347,7 +364,7 @@ def recomendar_bioinsumos(cultura, usa_bioinsumos, bioinsumos_selecionados):
 
 def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
     """
-    Gera gráfico educacional comparando cenários de manejo.
+    Gera gráfico educacional comparando cenários de manejo usando Matplotlib.
     """
     # Estimativa de produtividade base (kg/ha)
     bases_produtividade = {
@@ -378,43 +395,37 @@ def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
         cenario_adubacao *= 1.05
         cenario_adubacao_bio *= 1.05
     
-    cenarios = ['Sem manejo otimizado', 'Com adubação N', 'Com adubação + bioinsumos', 'Com manejo integrado']
+    cenarios = ['Sem manejo\notimizado', 'Com adubação\nN', 'Com adubação +\nbioinsumos', 'Com manejo\nintegrado']
     valores = [cenario_sem_manejo, cenario_adubacao, cenario_adubacao_bio, cenario_ideal]
     
-    # Criar gráfico com Plotly
-    fig = go.Figure()
+    # Criar gráfico com Matplotlib
+    fig, ax = plt.subplots(figsize=(10, 6))
     
     # Cores
     cores = ['#d32f2f', '#ff9800', '#4caf50', '#2e7d32']
     
-    fig.add_trace(go.Bar(
-        x=cenarios,
-        y=valores,
-        marker_color=cores,
-        text=[f'{v:,.0f} kg/ha' for v in valores],
-        textposition='auto',
-        textfont=dict(size=12, color='white'),
-        hovertemplate='<b>%{x}</b><br>Produtividade: %{text}<extra></extra>'
-    ))
+    # Criar barras
+    bars = ax.bar(cenarios, valores, color=cores, edgecolor='white', linewidth=2)
     
-    fig.update_layout(
-        title=f'Estimativa educativa de produtividade - {cultura}',
-        xaxis_title='Cenário de manejo',
-        yaxis_title='Produtividade estimada (kg/ha)',
-        yaxis_gridcolor='#e0e0e0',
-        plot_bgcolor='white',
-        height=450,
-        font=dict(size=12),
-        margin=dict(l=20, r=20, t=50, b=20)
-    )
+    # Adicionar valores nas barras
+    for bar, value in zip(bars, valores):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + height*0.02,
+                f'{value:,.0f} kg/ha', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
-    fig.add_annotation(
-        text='* Valores são simulações educativas, não substituem avaliações de campo',
-        xref='paper', yref='paper',
-        x=0.5, y=-0.15,
-        showarrow=False,
-        font=dict(size=10, color='#666')
-    )
+    # Configurar gráfico
+    ax.set_ylabel('Produtividade estimada (kg/ha)', fontsize=12, fontweight='bold')
+    ax.set_title(f'Estimativa educativa de produtividade - {cultura}', fontsize=14, fontweight='bold', pad=20)
+    ax.grid(True, axis='y', linestyle='--', alpha=0.3, color='#cccccc')
+    ax.set_axisbelow(True)
+    ax.set_ylim(0, max(valores) * 1.15)
+    
+    # Adicionar legenda personalizada
+    ax.text(0.02, -0.15, '* Valores são simulações educativas, não substituem avaliações de campo',
+            transform=ax.transAxes, fontsize=10, color='#666666', style='italic')
+    
+    # Ajustar layout
+    plt.tight_layout()
     
     return fig
 
@@ -459,7 +470,6 @@ init_session_state()
 
 # ===================== BARRA LATERAL =====================
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/000000/agriculture.png", width=80)
     st.markdown("### 🌱 Navegação Rápida")
     st.markdown("---")
     
@@ -1017,7 +1027,7 @@ with tab3:
         st.subheader("📊 3. Projeção de Desempenho")
         
         fig = gerar_grafico_performance(dose_n, cultura_escolhida, produtividade, ambiente)
-        st.plotly_chart(fig, use_container_width=True)
+        st.pyplot(fig)
         
         st.caption("* Os dados apresentados no gráfico são simulações educativas baseadas em incrementos percentuais estimados.")
         st.markdown('</div>', unsafe_allow_html=True)
