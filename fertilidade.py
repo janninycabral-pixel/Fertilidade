@@ -139,7 +139,7 @@ st.markdown("""
 # ===================== CHAVES API =====================
 GOOGLE_MAPS_API_KEY = "INSERIR_CHAVE_GOOGLE_MAPS_AQUI"
 OPENWEATHER_API_KEY = "INSERIR_CHAVE_OPENWEATHER_AQUI"
-GEOAPIFY_API_KEY = "INSERIR_CHAVE_GEOAPIFY_AQUI"
+GEOAPIFY_API_KEY = "26d9c20ff9d542ed80fbd9a63a6f50fe"
 
 # ===================== FUNÇÕES DE APOIO =====================
 def init_session_state():
