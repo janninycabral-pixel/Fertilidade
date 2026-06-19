@@ -158,6 +158,16 @@ def init_session_state():
         st.session_state.usa_bioinsumos = None
     if 'dados_salvos' not in st.session_state:
         st.session_state.dados_salvos = False
+    if 'cultura_escolhida' not in st.session_state:
+        st.session_state.cultura_escolhida = 'Milho'
+    if 'produtividade' not in st.session_state:
+        st.session_state.produtividade = 6000
+    if 'ambiente' not in st.session_state:
+        st.session_state.ambiente = 'Irrigado'
+    if 'leguminosa' not in st.session_state:
+        st.session_state.leguminosa = 'Não'
+    if 'cultura_anterior' not in st.session_state:
+        st.session_state.cultura_anterior = 'Soja'
 
 def get_valores_padrao():
     """Retorna valores médios de fertilidade para fins educativos."""
@@ -178,64 +188,129 @@ def get_valores_padrao():
         'textura': 'Média'
     }
 
-def calcular_dose_nitrogenio(cultura, produtividade, ambiente, cultura_anterior, leguminosa, textura, materia_organica):
+def calcular_dose_nitrogenio(cultura, produtividade, ambiente, cultura_anterior, leguminosa, textura, materia_organica, manejo_solo, usa_bioinsumos):
     """
     Calcula a dose recomendada de nitrogênio (kg/ha) com base em regras agronômicas simplificadas.
+    Agora com variação real baseada nos parâmetros informados.
     """
-    # Fatores base por cultura (kg de N por saca ou tonelada)
+    # Converter produtividade para toneladas por hectare
+    if produtividade > 0:
+        produtividade_t_ha = produtividade / 1000
+    else:
+        produtividade_t_ha = 3.0  # valor padrão
+    
+    # Fatores base por cultura (kg N por tonelada de produto)
     fatores_base = {
-        'Milho': 1.2,  # kg N por saca de 60kg
-        'Trigo': 1.5,  # kg N por saca de 60kg
-        'Soja': 0.3,   # kg N por saca de 60kg (fixação simbiótica)
-        'Feijão': 0.8, # kg N por saca de 60kg
-        'Sorgo': 1.0,  # kg N por saca de 60kg
-        'Algodão': 2.0 # kg N por tonelada de pluma
+        'Milho': 22,
+        'Trigo': 25,
+        'Soja': 5,    # Soja fixa N, precisa de pouco N mineral
+        'Feijão': 35,
+        'Sorgo': 20,
+        'Algodão': 30
     }
     
+    # Calcular dose base
+    if cultura in fatores_base:
+        dose_base = fatores_base[cultura] * produtividade_t_ha
+    else:
+        dose_base = 80  # valor padrão
+    
+    # Ajuste por cultura (específico)
+    if cultura == 'Soja':
+        # Soja precisa de pouco N mineral devido à fixação
+        dose_base = max(dose_base, 10)  # mínimo 10 kg/ha
+        dose_base = min(dose_base, 40)  # máximo 40 kg/ha
+    
     # Ajuste por ambiente
-    fator_ambiente = 1.3 if ambiente == 'Irrigado' else 1.0
+    fator_ambiente = 1.0
+    if ambiente == 'Irrigado':
+        if produtividade_t_ha > 5.0:
+            fator_ambiente = 1.20  # alta produtividade em irrigado
+        else:
+            fator_ambiente = 1.10
+    else:  # Sequeiro
+        if produtividade_t_ha > 3.0:
+            fator_ambiente = 0.95
+        else:
+            fator_ambiente = 0.85
+    
+    dose_ambiente = dose_base * fator_ambiente
     
     # Ajuste por cultura anterior e leguminosa
     fator_cultura_anterior = 1.0
     if cultura_anterior in ['Soja', 'Feijão']:
-        fator_cultura_anterior = 0.7
+        fator_cultura_anterior = 0.70
     elif cultura_anterior in ['Braquiária', 'Milheto']:
         fator_cultura_anterior = 0.85
+    elif cultura_anterior in ['Milho', 'Sorgo', 'Trigo']:
+        fator_cultura_anterior = 1.0
     
     if leguminosa == 'Sim':
-        fator_cultura_anterior *= 0.8
+        fator_cultura_anterior *= 0.80
     
-    # Ajuste por textura e matéria orgânica
-    fator_textura = {'Arenosa': 1.2, 'Média': 1.0, 'Argilosa': 0.9, 'Muito argilosa': 0.8}
+    dose_anterior = dose_ambiente * fator_cultura_anterior
+    
+    # Ajuste por textura
+    fator_textura = {'Arenosa': 1.15, 'Média': 1.0, 'Argilosa': 0.90, 'Muito argilosa': 0.85}
     fator_text = fator_textura.get(textura, 1.0)
+    dose_textura = dose_anterior * fator_text
     
     # Ajuste por matéria orgânica
     fator_mo = 1.0
     if materia_organica:
         if materia_organica > 3.0:
-            fator_mo = 0.85
+            fator_mo = 0.80
         elif materia_organica > 2.0:
-            fator_mo = 0.95
+            fator_mo = 0.90
+        elif materia_organica > 1.0:
+            fator_mo = 1.10
+        else:
+            fator_mo = 1.20
     
-    # Cálculo da dose base
-    if cultura in fatores_base:
-        dose_base = fatores_base[cultura] * produtividade
+    dose_mo = dose_textura * fator_mo
+    
+    # Ajuste por manejo do solo
+    fator_manejo = 1.0
+    if manejo_solo == 'Plantio direto':
+        fator_manejo = 0.90
+    elif manejo_solo == 'Plantio convencional':
+        fator_manejo = 1.15
+    elif manejo_solo == 'Sistema mínimo':
+        fator_manejo = 1.0
+    
+    dose_manejo = dose_mo * fator_manejo
+    
+    # Ajuste por bioinsumos (pequeno ajuste, mantém a recomendação)
+    if usa_bioinsumos == 'Sim':
+        dose_manejo *= 0.95  # redução pequena devido à eficiência
+        observacao_bio = "Bioinsumos podem aumentar a eficiência do N em até 15%"
     else:
-        dose_base = 80  # valor padrão
-    
-    # Aplicar fatores
-    dose_recomendada = dose_base * fator_ambiente * fator_cultura_anterior * fator_text * fator_mo
+        observacao_bio = "Considere uso de bioinsumos para melhor eficiência"
     
     # Arredondar para múltiplo de 5
-    dose_recomendada = round(dose_recomendada / 5) * 5
+    dose_final = round(dose_manejo / 5) * 5
     
     # Limites mínimos e máximos educativos
     if cultura == 'Soja':
-        dose_recomendada = min(max(dose_recomendada, 10), 80)
+        dose_final = min(max(dose_final, 10), 50)
     else:
-        dose_recomendada = min(max(dose_recomendada, 30), 250)
+        dose_final = min(max(dose_final, 30), 250)
     
-    return int(dose_recomendada)
+    # Gerar explicação do cálculo
+    explicacao = f"""
+    Cálculo da dose de N:
+    - Produtividade: {produtividade} kg/ha ({produtividade_t_ha:.1f} t/ha)
+    - Fator base para {cultura}: {fatores_base.get(cultura, 80)} kg N/t
+    - Dose base: {dose_base:.0f} kg N/ha
+    - Ajuste ambiente ({ambiente}): {fator_ambiente:.2f} → {dose_ambiente:.0f}
+    - Ajuste cultura anterior ({cultura_anterior}): {fator_cultura_anterior:.2f} → {dose_anterior:.0f}
+    - Ajuste textura ({textura}): {fator_text:.2f} → {dose_textura:.0f}
+    - Ajuste MO ({materia_organica:.1f}%): {fator_mo:.2f} → {dose_mo:.0f}
+    - Ajuste manejo ({manejo_solo}): {fator_manejo:.2f} → {dose_manejo:.0f}
+    - Dose final recomendada: {dose_final} kg N/ha
+    """
+    
+    return int(dose_final), explicacao, observacao_bio
 
 def escolher_fertilizante(dose_n, cultura, ambiente, ph):
     """
@@ -365,10 +440,19 @@ def recomendar_bioinsumos(cultura, usa_bioinsumos, bioinsumos_selecionados):
     
     return rec
 
-def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
+def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente, manejo_solo, usa_bioinsumos):
     """
     Gera gráfico educacional comparando cenários de manejo usando Altair.
+    Garante que o gráfico sempre seja gerado mesmo com valores variáveis.
     """
+    # Garantir que os valores são numéricos
+    try:
+        dose_n = float(dose_n) if dose_n else 80
+        produtividade = float(produtividade) if produtividade else 3000
+    except (ValueError, TypeError):
+        dose_n = 80
+        produtividade = 3000
+    
     # Estimativa de produtividade base (kg/ha)
     bases_produtividade = {
         'Milho': 6000,
@@ -380,23 +464,35 @@ def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
     }
     
     base = bases_produtividade.get(cultura, 3000)
-    if ambiente == 'Irrigado':
-        base *= 1.3
     
     # Ajustar para a produtividade esperada do usuário
-    if produtividade:
+    if produtividade and produtividade > 0:
         base = produtividade
     
-    # Cenários com incrementos percentuais educativos
-    cenario_sem_manejo = base * 0.65
-    cenario_adubacao = base * 0.85
-    cenario_adubacao_bio = base * 0.95
-    cenario_ideal = base * 1.0
+    # Ajuste por ambiente
+    if ambiente == 'Irrigado':
+        base *= 1.2
     
-    # Ajuste baseado na dose de N
-    if dose_n > 80:
-        cenario_adubacao *= 1.05
-        cenario_adubacao_bio *= 1.05
+    # Cenários com incrementos percentuais educativos
+    cenario_sem_manejo = base * 0.60
+    
+    # Com N recomendado (aumento baseado na dose)
+    incremento_n = min(dose_n / 200, 0.40)  # máximo 40% de aumento
+    cenario_adubacao = base * (0.75 + incremento_n * 0.5)
+    
+    # Com N + bioinsumos
+    incremento_bio = 0.10 if usa_bioinsumos == 'Sim' else 0.05
+    cenario_adubacao_bio = cenario_adubacao * (1 + incremento_bio)
+    
+    # Com manejo integrado (tudo otimizado)
+    incremento_integrado = 0.15 + (0.05 if manejo_solo == 'Plantio direto' else 0)
+    cenario_ideal = cenario_adubacao_bio * (1 + incremento_integrado)
+    
+    # Limitar valores para não ficarem abaixo do mínimo
+    cenario_sem_manejo = max(cenario_sem_manejo, base * 0.50)
+    cenario_adubacao = max(cenario_adubacao, base * 0.70)
+    cenario_adubacao_bio = max(cenario_adubacao_bio, base * 0.80)
+    cenario_ideal = max(cenario_ideal, base * 0.90)
     
     # Criar DataFrame para o gráfico
     dados = pd.DataFrame({
@@ -475,7 +571,7 @@ def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
     
     return final_chart
 
-def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_fertilizante, bioinsumo, manejo):
+def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_fertilizante, bioinsumo, manejo, explicacao):
     """
     Cria um resumo em card com as principais recomendações.
     """
@@ -494,6 +590,10 @@ def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_
             <div style="grid-column: span 2; color: #f57c00; font-size: 0.9rem; margin-top: 10px;">
                 <i>ℹ️ {manejo['observacao']}</i>
             </div>
+        </div>
+        <div style="margin-top: 15px; padding: 10px; background-color: #f5f5f5; border-radius: 8px; font-size: 0.85rem; font-family: monospace; white-space: pre-wrap;">
+            <strong>📐 Detalhamento do cálculo:</strong>
+            {explicacao}
         </div>
         <div style="margin-top: 15px; padding: 10px; background-color: #fff8e1; border-radius: 8px; font-size: 0.9rem;">
             <strong>⚠️ Importante:</strong> Esta recomendação é uma estimativa educativa. 
@@ -790,11 +890,27 @@ with tab2:
             outro_consorcio = None
             
             if sistema == "Consorciado":
+                # CORREÇÃO: Lista de opções com validação
+                opcoes_tipo_consorcio = [
+                    "Milho + braquiária",
+                    "Soja + braquiária",
+                    "Sorgo + braquiária",
+                    "Mix de cobertura",
+                    "Outro"
+                ]
+                
+                valor_salvo = st.session_state.plantio.get("tipo_consorcio", "Milho + braquiária")
+                
+                # Validar se o valor salvo está na lista
+                if valor_salvo in opcoes_tipo_consorcio:
+                    indice_tipo_consorcio = opcoes_tipo_consorcio.index(valor_salvo)
+                else:
+                    indice_tipo_consorcio = 0
+                
                 tipo_consorcio = st.selectbox(
                     "Tipo de consórcio",
-                    ["Milho + braquiária", "Soja + braquiária", "Sorgo + braquiária", "Mix de cobertura", "Outro"],
-                    index=0 if st.session_state.plantio.get('tipo_consorcio', '') == '' else
-                          ["Milho + braquiária", "Soja + braquiária", "Sorgo + braquiária", "Mix de cobertura", "Outro"].index(st.session_state.plantio.get('tipo_consorcio', 'Milho + braquiária'))
+                    opcoes_tipo_consorcio,
+                    index=indice_tipo_consorcio
                 )
                 
                 if tipo_consorcio == "Outro":
@@ -906,14 +1022,17 @@ with tab3:
             cultura_escolhida = st.selectbox(
                 "Cultura que pretende cultivar*",
                 ["Milho", "Trigo", "Soja", "Feijão", "Sorgo", "Algodão"],
-                index=0
+                index=0,
+                key="cultura_escolhida"
             )
+            st.session_state.cultura_escolhida = cultura_escolhida
             
             unidade_prod = st.selectbox(
                 "Unidade de produtividade",
                 ["kg/ha", "sacas/ha"],
                 index=0,
-                help="Escolha a unidade para a produtividade esperada"
+                help="Escolha a unidade para a produtividade esperada",
+                key="unidade_prod"
             )
             
             if unidade_prod == "kg/ha":
@@ -923,8 +1042,10 @@ with tab3:
                     max_value=20000, 
                     value=6000 if cultura_escolhida == "Milho" else 3000,
                     step=100,
-                    help="Exemplo: 6000 kg/ha para milho"
+                    help="Exemplo: 6000 kg/ha para milho",
+                    key="produtividade_kg"
                 )
+                st.session_state.produtividade = produtividade
             else:
                 # Converter sacas para kg (assumindo 60kg por saca para maioria)
                 produtividade_sacas = st.number_input(
@@ -933,34 +1054,42 @@ with tab3:
                     max_value=300, 
                     value=100 if cultura_escolhida == "Milho" else 50,
                     step=1,
-                    help="Exemplo: 100 sacas/ha para milho"
+                    help="Exemplo: 100 sacas/ha para milho",
+                    key="produtividade_sacas"
                 )
                 produtividade = produtividade_sacas * 60  # kg/ha
+                st.session_state.produtividade = produtividade
         
         with col2:
             ambiente = st.selectbox(
                 "Tipo de ambiente*",
                 ["Irrigado", "Sequeiro"],
                 index=0,
-                help="Irrigado = com irrigação disponível | Sequeiro = sem irrigação"
+                help="Irrigado = com irrigação disponível | Sequeiro = sem irrigação",
+                key="ambiente"
             )
+            st.session_state.ambiente = ambiente
             
             leguminosa = st.selectbox(
                 "Possui palhada ou cultura anterior leguminosa?",
                 ["Sim", "Não"],
                 index=1,
-                help="Leguminosas fixam nitrogênio, reduzindo a necessidade de adubação"
+                help="Leguminosas fixam nitrogênio, reduzindo a necessidade de adubação",
+                key="leguminosa"
             )
+            st.session_state.leguminosa = leguminosa
             
             cultura_anterior = st.selectbox(
                 "Cultura anterior*",
                 ["Soja", "Milho", "Braquiária", "Milheto", "Trigo", "Feijão", "Outra"],
-                index=0
+                index=0,
+                key="cultura_anterior"
             )
+            st.session_state.cultura_anterior = cultura_anterior
             
             outra_cultura_anterior = ""
             if cultura_anterior == "Outra":
-                outra_cultura_anterior = st.text_input("Especificar cultura anterior")
+                outra_cultura_anterior = st.text_input("Especificar cultura anterior", key="outra_cultura_anterior")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
@@ -978,15 +1107,23 @@ with tab3:
         mo = analise.get('materia_organica', 2.5)
         ph = analise.get('ph', 5.8)
         
-        # Calcular dose de N
-        dose_n = calcular_dose_nitrogenio(
+        # Obter manejo do solo da propriedade
+        manejo_solo = st.session_state.propriedade.get('manejo', 'Plantio direto')
+        
+        # Obter uso de bioinsumos
+        usa_bioinsumos = st.session_state.usa_bioinsumos
+        
+        # Calcular dose de N com a nova função
+        dose_n, explicacao, observacao_bio = calcular_dose_nitrogenio(
             cultura_escolhida, 
             produtividade, 
             ambiente, 
             cultura_anterior, 
             leguminosa, 
             textura, 
-            mo
+            mo,
+            manejo_solo,
+            usa_bioinsumos
         )
         
         # Escolher fertilizante
@@ -1017,7 +1154,9 @@ with tab3:
             'bioinsumos': bio_recomendacao,
             'ambiente': ambiente,
             'leguminosa': leguminosa,
-            'cultura_anterior': cultura_anterior
+            'cultura_anterior': cultura_anterior,
+            'explicacao': explicacao,
+            'observacao_bio': observacao_bio
         }
         
         # Exibir resultados
@@ -1044,6 +1183,8 @@ with tab3:
             st.write(f"📌 {manejo['estrategia']}")
             st.write(f"📅 {manejo['parcelamento']}")
             st.info(f"ℹ️ {manejo['observacao']}")
+            if observacao_bio:
+                st.info(f"🦠 {observacao_bio}")
         
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1072,7 +1213,14 @@ with tab3:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("📊 3. Projeção de Desempenho")
         
-        chart = gerar_grafico_performance(dose_n, cultura_escolhida, produtividade, ambiente)
+        chart = gerar_grafico_performance(
+            dose_n, 
+            cultura_escolhida, 
+            produtividade, 
+            ambiente,
+            manejo_solo,
+            usa_bioinsumos
+        )
         st.altair_chart(chart, use_container_width=True)
         
         st.caption("* Os dados apresentados no gráfico são simulações educativas baseadas em incrementos percentuais estimados.")
@@ -1089,7 +1237,8 @@ with tab3:
             fertilizante,
             qtd_fertilizante,
             bio_principal,
-            manejo
+            manejo,
+            explicacao
         )
         st.markdown(resumo_html, unsafe_allow_html=True)
         
@@ -1123,9 +1272,15 @@ with tab3:
             Cuidados: {bio_recomendacao['cuidados']}
             
             ----------------------------------------
+            DETALHAMENTO DO CÁLCULO
+            ----------------------------------------
+            {explicacao}
+            
+            ----------------------------------------
             OBSERVAÇÕES
             ----------------------------------------
             {manejo['observacao']}
+            {observacao_bio}
             
             ⚠️ Esta recomendação é uma estimativa educativa.
             Para uso real, consulte um engenheiro agrônomo.
@@ -1165,15 +1320,18 @@ with tab4:
         <p><strong>1. Dose de Nitrogênio:</strong></p>
         <p>A dose recomendada é calculada utilizando a fórmula:</p>
         <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; font-family: monospace; margin: 10px 0;">
-        Dose N = (Fator_base × Produtividade) × Fator_ambiente × Fator_cultura_anterior × Fator_textura × Fator_MO
+        Dose N = (Fator_base × Produtividade_t) × Fator_ambiente × Fator_cultura_anterior × Fator_textura × Fator_MO × Fator_manejo × Fator_bioinsumos
         </div>
         <p><strong>Onde:</strong></p>
         <ul>
-            <li><strong>Fator_base:</strong> kg de N por saca/tonelada de produto (varia por cultura)</li>
-            <li><strong>Fator_ambiente:</strong> 1.3 para irrigado, 1.0 para sequeiro</li>
+            <li><strong>Fator_base:</strong> kg de N por tonelada de produto (varia por cultura)</li>
+            <li><strong>Produtividade_t:</strong> Produtividade em toneladas por hectare</li>
+            <li><strong>Fator_ambiente:</strong> 1.0-1.2 para irrigado, 0.85-0.95 para sequeiro</li>
             <li><strong>Fator_cultura_anterior:</strong> 0.7 para leguminosas, 0.85 para braquiária/milheto</li>
-            <li><strong>Fator_textura:</strong> 1.2 (arenosa), 1.0 (média), 0.9 (argilosa), 0.8 (muito argilosa)</li>
-            <li><strong>Fator_MO:</strong> 0.85 (MO > 3%), 0.95 (MO > 2%), 1.0 (padrão)</li>
+            <li><strong>Fator_textura:</strong> 1.15 (arenosa), 1.0 (média), 0.9 (argilosa)</li>
+            <li><strong>Fator_MO:</strong> 0.8-0.9 (MO alta), 1.1-1.2 (MO baixa)</li>
+            <li><strong>Fator_manejo:</strong> 0.9 (plantio direto), 1.15 (convencional)</li>
+            <li><strong>Fator_bioinsumos:</strong> 0.95 (com bioinsumos)</li>
         </ul>
         <br>
         <p><strong>2. Quantidade de Fertilizante:</strong></p>
