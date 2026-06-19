@@ -99,6 +99,22 @@ st.markdown("""
         font-weight: 500;
         color: #333;
     }
+    .highlight-box {
+        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        padding: 20px;
+        border-radius: 12px;
+        border: 2px solid #2e7d32;
+        margin: 15px 0;
+    }
+    .info-badge {
+        background-color: #1976d2;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        display: inline-block;
+        margin: 5px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,6 +136,8 @@ def init_session_state():
         st.session_state.tem_analise = None
     if 'usa_bioinsumos' not in st.session_state:
         st.session_state.usa_bioinsumos = None
+    if 'dados_salvos' not in st.session_state:
+        st.session_state.dados_salvos = False
 
 def get_valores_padrao():
     """Retorna valores médios de fertilidade para fins educativos."""
@@ -428,13 +446,54 @@ def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_
     """
     return resumo
 
+def validar_campos_obrigatorios():
+    """Valida se os campos obrigatórios estão preenchidos."""
+    if not st.session_state.propriedade.get('nome'):
+        return False, "Nome da propriedade é obrigatório"
+    if not st.session_state.analise_solo:
+        return False, "Análise de solo não configurada"
+    return True, "OK"
+
 # ===================== INICIALIZAÇÃO DA SESSÃO =====================
 init_session_state()
 
-# ===================== NAVEGAÇÃO POR ABAS =====================
+# ===================== BARRA LATERAL =====================
+with st.sidebar:
+    st.image("https://img.icons8.com/fluency/96/000000/agriculture.png", width=80)
+    st.markdown("### 🌱 Navegação Rápida")
+    st.markdown("---")
+    
+    # Status do sistema
+    st.markdown("#### 📊 Status")
+    if st.session_state.propriedade.get('nome'):
+        st.success(f"✅ Propriedade: {st.session_state.propriedade['nome']}")
+    else:
+        st.warning("⚠️ Propriedade não cadastrada")
+    
+    if st.session_state.analise_solo:
+        st.success("✅ Análise de solo configurada")
+    else:
+        st.warning("⚠️ Análise de solo não configurada")
+    
+    if st.session_state.recomendacao:
+        st.success("✅ Recomendação disponível")
+    else:
+        st.info("ℹ️ Aguardando recomendação")
+    
+    st.markdown("---")
+    st.markdown("""
+    <div style="font-size: 0.8rem; color: #666;">
+        <strong>Versão:</strong> 1.0.0<br>
+        <strong>Desenvolvido para:</strong> Disciplina de IA<br>
+        <strong>Propósito:</strong> Educacional
+    </div>
+    """, unsafe_allow_html=True)
+
+# ===================== TÍTULO PRINCIPAL =====================
 st.markdown('<div class="title-main">🌱 Sistema de Apoio à Decisão</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Manejo de nitrogênio, fertilidade e bioinsumos em sistemas agrícolas</div>', unsafe_allow_html=True)
 
+# ===================== NAVEGAÇÃO POR ABAS =====================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📋 Cadastro da Propriedade", 
     "🌿 Caracterização do Plantio", 
@@ -453,10 +512,10 @@ with tab1:
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("Informações Gerais")
             
-            nome_prop = st.text_input("Nome da propriedade", value=st.session_state.propriedade.get('nome', ''))
-            nome_prop = st.text_input("Nome do proprietário", value=st.session_state.propriedade.get('proprietario', ''))
+            nome_prop = st.text_input("Nome da propriedade*", value=st.session_state.propriedade.get('nome', ''), help="Campo obrigatório")
+            nome_proprietario = st.text_input("Nome do proprietário", value=st.session_state.propriedade.get('proprietario', ''))
             municipio = st.text_input("Município", value=st.session_state.propriedade.get('municipio', ''))
-            estado = st.text_input("Estado", value=st.session_state.propriedade.get('estado', ''))
+            estado = st.text_input("Estado (UF)", value=st.session_state.propriedade.get('estado', ''))
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -469,13 +528,15 @@ with tab1:
                 "Área agricultável irrigada (ha)", 
                 min_value=0.0, 
                 value=float(st.session_state.propriedade.get('area_irrigada', 0)),
-                step=0.5
+                step=0.5,
+                format="%.1f"
             )
             area_sequeiro = st.number_input(
                 "Área agricultável de sequeiro (ha)", 
                 min_value=0.0, 
                 value=float(st.session_state.propriedade.get('area_sequeiro', 0)),
-                step=0.5
+                step=0.5,
+                format="%.1f"
             )
             
             st.markdown('</div>', unsafe_allow_html=True)
@@ -488,11 +549,18 @@ with tab1:
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("🌍 Coordenadas Geográficas")
             
-            lat = st.text_input("Latitude", value=st.session_state.propriedade.get('latitude', ''))
-            lon = st.text_input("Longitude", value=st.session_state.propriedade.get('longitude', ''))
+            lat = st.text_input("Latitude", value=st.session_state.propriedade.get('latitude', ''), placeholder="Ex: -22.9068")
+            lon = st.text_input("Longitude", value=st.session_state.propriedade.get('longitude', ''), placeholder="Ex: -47.0616")
             
-            st.caption("Exemplo: -22.9068, -47.0616")
-            st.caption(f"🔑 Chave API de mapas configurada: {'✓ Sim' if GOOGLE_MAPS_API_KEY != 'INSERIR_CHAVE_API_AQUI' else '✗ Não configurada'}")
+            st.caption("Formato: graus decimais (ex: -22.9068, -47.0616)")
+            
+            # Exibir status da API
+            if GOOGLE_MAPS_API_KEY != "INSERIR_CHAVE_API_AQUI":
+                st.success("✅ Chave API de mapas configurada")
+                st.caption("🔑 API Key: " + GOOGLE_MAPS_API_KEY[:8] + "..." + GOOGLE_MAPS_API_KEY[-4:])
+            else:
+                st.warning("⚠️ Chave API não configurada")
+                st.caption("Para integrar com Google Maps, insira a chave no código (variável GOOGLE_MAPS_API_KEY)")
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -508,6 +576,7 @@ with tab1:
                       ["Plantio direto", "Plantio convencional", "Sistema mínimo", "Integração lavoura-pecuária", "Outro"].index(st.session_state.propriedade.get('manejo', 'Plantio direto'))
             )
             
+            outro_manejo = ""
             if manejo == "Outro":
                 outro_manejo = st.text_input("Especificar manejo", value=st.session_state.propriedade.get('outro_manejo', ''))
             
@@ -527,13 +596,13 @@ with tab1:
     
     if tem_analise == "Sim":
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.info("Preencha os dados da análise de solo. Campos com * são recomendados.")
+        st.info("📊 Preencha os dados da análise de solo. Campos com * são recomendados para melhor precisão.")
         
         col5, col6 = st.columns(2)
         
         with col5:
-            ph = st.number_input("pH (CaCl2 ou água)", min_value=3.0, max_value=8.0, value=float(st.session_state.analise_solo.get('ph', 5.8)), step=0.1)
-            materia_organica = st.number_input("Matéria orgânica (%)", min_value=0.0, max_value=10.0, value=float(st.session_state.analise_solo.get('materia_organica', 2.5)), step=0.1)
+            ph = st.number_input("pH (CaCl2 ou água)*", min_value=3.0, max_value=8.0, value=float(st.session_state.analise_solo.get('ph', 5.8)), step=0.1)
+            materia_organica = st.number_input("Matéria orgânica (%)*", min_value=0.0, max_value=10.0, value=float(st.session_state.analise_solo.get('materia_organica', 2.5)), step=0.1)
             fosforo = st.number_input("Fósforo (mg/dm³)", min_value=0, max_value=200, value=int(st.session_state.analise_solo.get('fosforo', 15)), step=1)
             potassio = st.number_input("Potássio (mg/dm³)", min_value=0, max_value=500, value=int(st.session_state.analise_solo.get('potassio', 120)), step=1)
             calcio = st.number_input("Cálcio (cmolc/dm³)", min_value=0.0, max_value=20.0, value=float(st.session_state.analise_solo.get('calcio', 4.0)), step=0.1)
@@ -549,7 +618,7 @@ with tab1:
             zinco = st.number_input("Zinco (mg/dm³)", min_value=0.0, max_value=10.0, value=float(st.session_state.analise_solo.get('zinco', 1.5)), step=0.1)
             
             textura = st.selectbox(
-                "Textura do solo",
+                "Textura do solo*",
                 ["Arenosa", "Média", "Argilosa", "Muito argilosa"],
                 index=["Arenosa", "Média", "Argilosa", "Muito argilosa"].index(st.session_state.analise_solo.get('textura', 'Média'))
             )
@@ -587,28 +656,28 @@ with tab1:
             col7, col8 = st.columns(2)
             with col7:
                 st.write("**Macronutrientes:**")
-                st.write(f"pH: {valores_padrao['ph']}")
-                st.write(f"Matéria orgânica: {valores_padrao['materia_organica']}%")
-                st.write(f"Fósforo: {valores_padrao['fosforo']} mg/dm³")
-                st.write(f"Potássio: {valores_padrao['potassio']} mg/dm³")
-                st.write(f"Cálcio: {valores_padrao['calcio']} cmolc/dm³")
-                st.write(f"Magnésio: {valores_padrao['magnesio']} cmolc/dm³")
+                st.write(f"• pH: {valores_padrao['ph']}")
+                st.write(f"• Matéria orgânica: {valores_padrao['materia_organica']}%")
+                st.write(f"• Fósforo: {valores_padrao['fosforo']} mg/dm³")
+                st.write(f"• Potássio: {valores_padrao['potassio']} mg/dm³")
+                st.write(f"• Cálcio: {valores_padrao['calcio']} cmolc/dm³")
+                st.write(f"• Magnésio: {valores_padrao['magnesio']} cmolc/dm³")
             with col8:
                 st.write("**Outros atributos:**")
-                st.write(f"Alumínio: {valores_padrao['aluminio']} cmolc/dm³")
-                st.write(f"H + Al: {valores_padrao['h_al']} cmolc/dm³")
-                st.write(f"CTC: {valores_padrao['ctc']} cmolc/dm³")
-                st.write(f"Sat. bases: {valores_padrao['sb']}%")
-                st.write(f"Enxofre: {valores_padrao['enxofre']} mg/dm³")
-                st.write(f"Boro: {valores_padrao['boro']} mg/dm³")
-                st.write(f"Zinco: {valores_padrao['zinco']} mg/dm³")
-                st.write(f"Textura: {valores_padrao['textura']}")
+                st.write(f"• Alumínio: {valores_padrao['aluminio']} cmolc/dm³")
+                st.write(f"• H + Al: {valores_padrao['h_al']} cmolc/dm³")
+                st.write(f"• CTC: {valores_padrao['ctc']} cmolc/dm³")
+                st.write(f"• Sat. bases: {valores_padrao['sb']}%")
+                st.write(f"• Enxofre: {valores_padrao['enxofre']} mg/dm³")
+                st.write(f"• Boro: {valores_padrao['boro']} mg/dm³")
+                st.write(f"• Zinco: {valores_padrao['zinco']} mg/dm³")
+                st.write(f"• Textura: {valores_padrao['textura']}")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Salvar dados da propriedade
     st.session_state.propriedade = {
         'nome': nome_prop,
-        'proprietario': nome_prop,
+        'proprietario': nome_proprietario,
         'municipio': municipio,
         'estado': estado,
         'area_irrigada': area_irrigada,
@@ -619,7 +688,19 @@ with tab1:
         'outro_manejo': outro_manejo if manejo == "Outro" else ''
     }
     
-    st.success("✅ Dados da propriedade e análise de solo salvos!")
+    # Botão para salvar
+    if st.button("💾 Salvar Dados da Propriedade", use_container_width=True):
+        st.session_state.dados_salvos = True
+        st.success("✅ Dados da propriedade e análise de solo salvos com sucesso!")
+        
+        # Mostrar resumo
+        with st.expander("📋 Resumo dos dados salvos"):
+            st.write("**Propriedade:**", nome_prop)
+            st.write("**Município:**", municipio)
+            st.write("**Área irrigada:**", f"{area_irrigada} ha")
+            st.write("**Área sequeiro:**", f"{area_sequeiro} ha")
+            st.write("**Manejo:**", manejo)
+            st.write("**Análise de solo:**", "✅ Disponível" if tem_analise == "Sim" else "⚠️ Valores médios")
 
 # ===================== ABA 2 - CARACTERIZAÇÃO DO PLANTIO =====================
 with tab2:
@@ -638,6 +719,7 @@ with tab2:
                 default=st.session_state.plantio.get('culturas', [])
             )
             
+            outra_cultura = ""
             if "Outra" in culturas:
                 outra_cultura = st.text_input("Especificar outra cultura", value=st.session_state.plantio.get('outra_cultura', ''))
             
@@ -647,6 +729,9 @@ with tab2:
                 index=0 if st.session_state.plantio.get('sistema', '') == '' else
                       ["Solteiro", "Consorciado"].index(st.session_state.plantio.get('sistema', 'Solteiro'))
             )
+            
+            tipo_consorcio = None
+            outro_consorcio = None
             
             if sistema == "Consorciado":
                 tipo_consorcio = st.selectbox(
@@ -658,9 +743,6 @@ with tab2:
                 
                 if tipo_consorcio == "Outro":
                     outro_consorcio = st.text_input("Especificar consórcio", value=st.session_state.plantio.get('outro_consorcio', ''))
-            else:
-                tipo_consorcio = None
-                outro_consorcio = None
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -685,6 +767,7 @@ with tab2:
                        "Sistema com plantas de cobertura", "Outro"].index(st.session_state.plantio.get('rotacao', 'Sem rotação definida'))
             )
             
+            outra_rotacao = ""
             if rotacao == "Outro":
                 outra_rotacao = st.text_input("Especificar rotação", value=st.session_state.plantio.get('outra_rotacao', ''))
             
@@ -740,7 +823,8 @@ with tab2:
         'usa_bioinsumos': usa_bio
     })
     
-    st.success("✅ Dados do plantio salvos!")
+    if st.button("💾 Salvar Dados do Plantio", use_container_width=True):
+        st.success("✅ Dados do plantio salvos com sucesso!")
 
 # ===================== ABA 3 - RECOMENDAÇÃO AGRONÔMICA =====================
 with tab3:
@@ -751,6 +835,10 @@ with tab3:
         st.warning("⚠️ Nenhuma análise de solo disponível. Acesse a aba 'Cadastro da Propriedade' para configurar.")
         st.stop()
     
+    # Verificar se propriedade foi cadastrada
+    if not st.session_state.propriedade.get('nome'):
+        st.warning("⚠️ Propriedade não cadastrada. Acesse a aba 'Cadastro da Propriedade' primeiro.")
+    
     # Inputs do usuário
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -760,7 +848,7 @@ with tab3:
         
         with col1:
             cultura_escolhida = st.selectbox(
-                "Cultura que pretende cultivar",
+                "Cultura que pretende cultivar*",
                 ["Milho", "Trigo", "Soja", "Feijão", "Sorgo", "Algodão"],
                 index=0
             )
@@ -768,54 +856,65 @@ with tab3:
             unidade_prod = st.selectbox(
                 "Unidade de produtividade",
                 ["kg/ha", "sacas/ha"],
-                index=0
+                index=0,
+                help="Escolha a unidade para a produtividade esperada"
             )
             
             if unidade_prod == "kg/ha":
                 produtividade = st.number_input(
-                    "Produtividade esperada (kg/ha)", 
+                    "Produtividade esperada (kg/ha)*", 
                     min_value=100, 
                     max_value=20000, 
                     value=6000 if cultura_escolhida == "Milho" else 3000,
-                    step=100
+                    step=100,
+                    help="Exemplo: 6000 kg/ha para milho"
                 )
             else:
                 # Converter sacas para kg (assumindo 60kg por saca para maioria)
                 produtividade_sacas = st.number_input(
-                    "Produtividade esperada (sacas/ha)", 
+                    "Produtividade esperada (sacas/ha)*", 
                     min_value=1, 
                     max_value=300, 
                     value=100 if cultura_escolhida == "Milho" else 50,
-                    step=1
+                    step=1,
+                    help="Exemplo: 100 sacas/ha para milho"
                 )
                 produtividade = produtividade_sacas * 60  # kg/ha
         
         with col2:
             ambiente = st.selectbox(
-                "Tipo de ambiente",
+                "Tipo de ambiente*",
                 ["Irrigado", "Sequeiro"],
-                index=0
+                index=0,
+                help="Irrigado = com irrigação disponível | Sequeiro = sem irrigação"
             )
             
             leguminosa = st.selectbox(
                 "Possui palhada ou cultura anterior leguminosa?",
                 ["Sim", "Não"],
-                index=1
+                index=1,
+                help="Leguminosas fixam nitrogênio, reduzindo a necessidade de adubação"
             )
             
             cultura_anterior = st.selectbox(
-                "Cultura anterior",
+                "Cultura anterior*",
                 ["Soja", "Milho", "Braquiária", "Milheto", "Trigo", "Feijão", "Outra"],
                 index=0
             )
             
+            outra_cultura_anterior = ""
             if cultura_anterior == "Outra":
                 outra_cultura_anterior = st.text_input("Especificar cultura anterior")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Botão para gerar recomendação
-    if st.button("🔬 Gerar Recomendação", use_container_width=True):
+    if st.button("🔬 Gerar Recomendação", use_container_width=True, type="primary"):
+        
+        # Validar campos obrigatórios
+        if not cultura_escolhida or not produtividade:
+            st.error("❌ Por favor, preencha todos os campos obrigatórios (*)")
+            st.stop()
         
         # Obter dados da análise de solo
         analise = st.session_state.analise_solo
@@ -856,13 +955,21 @@ with tab3:
             'produtividade': produtividade,
             'dose_n': dose_n,
             'fertilizante': fertilizante,
+            'teor_n': teor_n,
             'qtd_fertilizante': qtd_fertilizante,
             'manejo': manejo,
-            'bioinsumos': bio_recomendacao
+            'bioinsumos': bio_recomendacao,
+            'ambiente': ambiente,
+            'leguminosa': leguminosa,
+            'cultura_anterior': cultura_anterior
         }
         
         # Exibir resultados
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="highlight-box">', unsafe_allow_html=True)
+        st.subheader("📋 Recomendação Gerada")
+        st.caption(f"Baseada na análise de solo {'informada' if st.session_state.tem_analise == 'Sim' else 'média (educativa)'}")
+        st.markdown('</div>', unsafe_allow_html=True)
         
         # 1. Recomendação de Nitrogênio
         st.markdown('<div class="card card-azul">', unsafe_allow_html=True)
@@ -874,6 +981,7 @@ with tab3:
             st.metric("Dose estimada de N", f"{dose_n} kg/ha")
             st.metric("Fertilizante recomendado", fertilizante)
             st.metric("Quantidade aproximada", f"{qtd_fertilizante:.1f} kg/ha")
+            st.caption(f"Teor de N do {fertilizante}: {teor_n*100:.0f}%")
         
         with col4:
             st.write("**Estratégia de manejo:**")
@@ -929,30 +1037,93 @@ with tab3:
         )
         st.markdown(resumo_html, unsafe_allow_html=True)
         
+        # Botão para baixar relatório
+        if st.button("📥 Baixar Recomendação (Texto)", use_container_width=True):
+            relatorio = f"""
+            ========================================
+            RELATÓRIO DE RECOMENDAÇÃO AGRONÔMICA
+            ========================================
+            
+            PROPRIEDADE: {st.session_state.propriedade.get('nome', 'Não informado')}
+            PROPRIETÁRIO: {st.session_state.propriedade.get('proprietario', 'Não informado')}
+            MUNICÍPIO: {st.session_state.propriedade.get('municipio', 'Não informado')}
+            
+            ----------------------------------------
+            RECOMENDAÇÃO DE NITROGÊNIO
+            ----------------------------------------
+            Cultura: {cultura_escolhida}
+            Produtividade esperada: {produtividade:.0f} kg/ha
+            Dose de N recomendada: {dose_n} kg/ha
+            Fertilizante: {fertilizante}
+            Quantidade: {qtd_fertilizante:.1f} kg/ha
+            Estratégia: {manejo['estrategia']}
+            Parcelamento: {manejo['parcelamento']}
+            
+            ----------------------------------------
+            RECOMENDAÇÃO DE BIOINSUMOS
+            ----------------------------------------
+            Microrganismos: {', '.join(bio_recomendacao['microrganismos'])}
+            Forma de uso: {bio_recomendacao['forma_uso']}
+            Cuidados: {bio_recomendacao['cuidados']}
+            
+            ----------------------------------------
+            OBSERVAÇÕES
+            ----------------------------------------
+            {manejo['observacao']}
+            
+            ⚠️ Esta recomendação é uma estimativa educativa.
+            Para uso real, consulte um engenheiro agrônomo.
+            
+            Data de geração: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}
+            """
+            
+            st.download_button(
+                label="💾 Baixar como TXT",
+                data=relatorio,
+                file_name=f"recomendacao_{cultura_escolhida}_{pd.Timestamp.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+        
         st.success("✅ Recomendação gerada com sucesso!")
 
 # ===================== ABA 4 - REFERÊNCIAS E METODOLOGIA =====================
 with tab4:
     st.header("📚 Referências e Metodologia")
     
+    # Introdução
     st.markdown("""
     <div class="card">
-        <h3>📖 Metodologia de Cálculo</h3>
-        <p>O sistema utiliza regras condicionais baseadas em literatura agronômica para estimar recomendações.</p>
+        <h3>📖 Sobre o Sistema</h3>
+        <p>Este sistema foi desenvolvido como ferramenta educacional para apoio à decisão no manejo de nitrogênio, 
+        fertilidade e bioinsumos em sistemas agrícolas. Utiliza regras condicionais baseadas em literatura 
+        agronômica para estimar recomendações.</p>
+        <p><span class="info-badge">Educacional</span></p>
     </div>
     """, unsafe_allow_html=True)
     
+    # Metodologia
     st.markdown("""
     <div class="card card-azul">
-        <h4>🔬 Fórmulas Utilizadas</h4>
-        <p><strong>Dose de nitrogênio:</strong></p>
-        <p>Dose N = (Fator base da cultura × Produtividade) × Fator_ambiente × Fator_cultura_anterior × Fator_textura × Fator_MO</p>
+        <h4>🔬 Metodologia de Cálculo</h4>
+        <p><strong>1. Dose de Nitrogênio:</strong></p>
+        <p>A dose recomendada é calculada utilizando a fórmula:</p>
+        <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; font-family: monospace; margin: 10px 0;">
+        Dose N = (Fator_base × Produtividade) × Fator_ambiente × Fator_cultura_anterior × Fator_textura × Fator_MO
+        </div>
+        <p><strong>Onde:</strong></p>
+        <ul>
+            <li><strong>Fator_base:</strong> kg de N por saca/tonelada de produto (varia por cultura)</li>
+            <li><strong>Fator_ambiente:</strong> 1.3 para irrigado, 1.0 para sequeiro</li>
+            <li><strong>Fator_cultura_anterior:</strong> 0.7 para leguminosas, 0.85 para braquiária/milheto</li>
+            <li><strong>Fator_textura:</strong> 1.2 (arenosa), 1.0 (média), 0.9 (argilosa), 0.8 (muito argilosa)</li>
+            <li><strong>Fator_MO:</strong> 0.85 (MO > 3%), 0.95 (MO > 2%), 1.0 (padrão)</li>
+        </ul>
         <br>
-        <p><strong>Quantidade de fertilizante:</strong></p>
+        <p><strong>2. Quantidade de Fertilizante:</strong></p>
         <p>Quantidade (kg/ha) = Dose N recomendada (kg/ha) / Teor de N do fertilizante</p>
         <p><strong>Exemplo:</strong> Ureia possui aproximadamente 45% de N.</p>
-        <p>Se a dose recomendada for 120 kg/ha de N:</p>
-        <p>120 / 0,45 = 266,7 kg/ha de ureia</p>
+        <p>Se a dose recomendada for 120 kg/ha de N: 120 / 0,45 = 266,7 kg/ha de ureia</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -965,46 +1136,53 @@ with tab4:
                 <tr style="background-color: #e8f5e9;">
                     <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Fertilizante</th>
                     <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Teor de N (%)</th>
+                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Características</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;">Ureia</td><td style="padding: 8px; border: 1px solid #ddd;">45%</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;">Sulfato de amônio</td><td style="padding: 8px; border: 1px solid #ddd;">20% a 21%</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;">Nitrato de amônio</td><td style="padding: 8px; border: 1px solid #ddd;">32% a 34%</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;">MAP</td><td style="padding: 8px; border: 1px solid #ddd;">10% a 11%</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;">DAP</td><td style="padding: 8px; border: 1px solid #ddd;">18%</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;">Ureia</td><td style="padding: 8px; border: 1px solid #ddd;">45%</td><td style="padding: 8px; border: 1px solid #ddd;">Alta concentração, cobertura</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;">Sulfato de amônio</td><td style="padding: 8px; border: 1px solid #ddd;">20% a 21%</td><td style="padding: 8px; border: 1px solid #ddd;">Fonte de N + S, acidificante</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;">Nitrato de amônio</td><td style="padding: 8px; border: 1px solid #ddd;">32% a 34%</td><td style="padding: 8px; border: 1px solid #ddd;">N de rápida disponibilidade</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;">MAP</td><td style="padding: 8px; border: 1px solid #ddd;">10% a 11%</td><td style="padding: 8px; border: 1px solid #ddd;">Fosfato monoamônico</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;">DAP</td><td style="padding: 8px; border: 1px solid #ddd;">18%</td><td style="padding: 8px; border: 1px solid #ddd;">Fosfato diamônico</td></tr>
             </tbody>
         </table>
+        <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">* Teores aproximados para fins educativos</p>
     </div>
     """, unsafe_allow_html=True)
     
+    # Limitações
     st.markdown("""
     <div class="card card-warning">
         <h4>⚠️ Limitações do Sistema</h4>
         <ul>
-            <li>As recomendações são estimativas educativas, não substituem avaliação técnica profissional.</li>
-            <li>Quando não há análise de solo, o sistema utiliza valores médios simulados.</li>
-            <li>O gráfico de desempenho é uma projeção didática baseada em incrementos percentuais estimados.</li>
-            <li>Para uso real, consulte um engenheiro agrônomo e siga boletins técnicos regionais.</li>
+            <li>As recomendações são <strong>estimativas educativas</strong>, não substituem avaliação técnica profissional.</li>
+            <li>Quando não há análise de solo, o sistema utiliza <strong>valores médios simulados</strong>.</li>
+            <li>O gráfico de desempenho é uma <strong>projeção didática</strong> baseada em incrementos percentuais estimados.</li>
+            <li>Para uso real, consulte um <strong>engenheiro agrônomo</strong> e siga boletins técnicos regionais.</li>
             <li>O sistema não considera todos os fatores de campo (clima, pragas, doenças, etc.).</li>
+            <li>Os valores são baseados em <strong>regras simplificadas</strong> e podem não refletir condições específicas.</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
     
+    # Referências
     st.markdown("""
     <div class="card">
         <h4>📚 Referências Bibliográficas</h4>
         <ul>
-            <li>EMBRAPA. Sistemas de produção e recomendações técnicas para culturas anuais.</li>
-            <li>RAIJ, B. van et al. Recomendações de adubação e calagem para o Estado de São Paulo. Boletim Técnico 100. IAC.</li>
-            <li>MALAVOLTA, E. Manual de nutrição mineral de plantas.</li>
-            <li>TAIZ, L. et al. Fisiologia e desenvolvimento vegetal.</li>
-            <li>HUNGRIA, M. et al. Estudos sobre inoculação, fixação biológica de nitrogênio e uso de rizobactérias na agricultura.</li>
-            <li>DOBBELAERE, S.; VANDERLEYDEN, J.; OKON, Y. Plant growth-promoting effects of diazotrophs.</li>
+            <li><strong>EMBRAPA.</strong> Sistemas de produção e recomendações técnicas para culturas anuais.</li>
+            <li><strong>RAIJ, B. van et al.</strong> Recomendações de adubação e calagem para o Estado de São Paulo. Boletim Técnico 100. IAC.</li>
+            <li><strong>MALAVOLTA, E.</strong> Manual de nutrição mineral de plantas.</li>
+            <li><strong>TAIZ, L. et al.</strong> Fisiologia e desenvolvimento vegetal.</li>
+            <li><strong>HUNGRIA, M. et al.</strong> Estudos sobre inoculação, fixação biológica de nitrogênio e uso de rizobactérias na agricultura.</li>
+            <li><strong>DOBBELAERE, S.; VANDERLEYDEN, J.; OKON, Y.</strong> Plant growth-promoting effects of diazotrophs.</li>
+            <li><strong>FAGERIA, N.K.</strong> Eficiência de uso de nitrogênio em culturas anuais.</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
     
+    # Como funciona
     st.markdown("""
     <div class="card card-info">
         <h4>💡 Como o Sistema Funciona</h4>
@@ -1015,6 +1193,31 @@ with tab4:
             <li><strong>Bioinsumos:</strong> Recomendação de microrganismos benéficos específicos para cada cultura.</li>
             <li><strong>Projeção educativa:</strong> Gráfico mostrando estimativas de produtividade em diferentes cenários de manejo.</li>
         </ol>
-        <p style="margin-top: 10px; color: #2e7d32;"><strong>Nota:</strong> Todas as recomendações são baseadas em regras agronômicas simplificadas e têm caráter educativo.</p>
+        <p style="margin-top: 10px; color: #1b5e20;"><strong>✅ Nota:</strong> Todas as recomendações são baseadas em regras agronômicas simplificadas e têm caráter educativo.</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Fontes de dados
+    st.markdown("""
+    <div class="card">
+        <h4>📊 Fontes de Dados Utilizadas</h4>
+        <ul>
+            <li><strong>Valores de referência:</strong> Embrapa, IAC e literatura científica</li>
+            <li><strong>Fatores de cultura:</strong> Baseados em recomendações oficiais de adubação</li>
+            <li><strong>Bioinsumos:</strong> Literatura sobre rizobactérias promotoras de crescimento</li>
+            <li><strong>Eficiência de N:</strong> Estudos sobre eficiência de uso de nitrogênio</li>
+            <li><strong>Valores médios:</strong> Quando não há análise de solo, utiliza-se dados de solos brasileiros</li>
+        </ul>
+        <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">* Para dados precisos, recomenda-se realizar análise de solo específica.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ===================== RODAPÉ =====================
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #666; font-size: 0.9rem; padding: 20px;">
+    <p>🌱 Sistema de Apoio à Decisão - Manejo de Nitrogênio | Versão 1.0.0</p>
+    <p>Desenvolvido para disciplina de IA | Propósito educacional</p>
+    <p>© 2026 - Todos os direitos reservados</p>
+</div>
+""", unsafe_allow_html=True)
