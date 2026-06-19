@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import altair as alt
 from datetime import datetime
 import requests
 import io
@@ -137,9 +136,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ===================== CHAVE API (FUTURA) =====================
-GOOGLE_MAPS_API_KEY = "INSERIR_CHAVE_API_AQUI"
-OPENWEATHER_API_KEY = "INSERIR_CHAVE_API_AQUI"
+# ===================== CHAVES API =====================
+GOOGLE_MAPS_API_KEY = "INSERIR_CHAVE_GOOGLE_MAPS_AQUI"
+OPENWEATHER_API_KEY = "INSERIR_CHAVE_OPENWEATHER_AQUI"
+GEOAPIFY_API_KEY = "INSERIR_CHAVE_GEOAPIFY_AQUI"
 
 # ===================== FUNÇÕES DE APOIO =====================
 def init_session_state():
@@ -430,141 +430,6 @@ def recomendar_bioinsumos(cultura, usa_bioinsumos, bioinsumos_selecionados):
     
     return rec
 
-def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente, manejo_solo, usa_bioinsumos):
-    """
-    Gera gráfico educacional comparando cenários de manejo usando Plotly.
-    Mais estável no Streamlit Cloud.
-    """
-    # Garantir que os valores são numéricos
-    try:
-        dose_n = float(dose_n) if dose_n is not None and dose_n != '' else 80
-    except (ValueError, TypeError):
-        dose_n = 80
-    
-    try:
-        produtividade = float(produtividade) if produtividade is not None and produtividade != '' else 3000
-    except (ValueError, TypeError):
-        produtividade = 3000
-    
-    if produtividade <= 0:
-        produtividade = 3000
-    
-    if dose_n <= 0:
-        dose_n = 80
-    
-    # Estimativa de produtividade base (kg/ha)
-    bases_produtividade = {
-        'Milho': 6000,
-        'Trigo': 3000,
-        'Soja': 3000,
-        'Feijão': 2000,
-        'Sorgo': 4000,
-        'Algodão': 3000
-    }
-    
-    base = bases_produtividade.get(cultura, 3000)
-    
-    # Ajustar para a produtividade esperada do usuário
-    if produtividade and produtividade > 0:
-        base = produtividade
-    
-    # Ajuste por ambiente
-    if ambiente == 'Irrigado':
-        base *= 1.2
-    
-    # Cenários com incrementos percentuais educativos
-    cenario_sem_manejo = base * 0.60
-    
-    # Com N recomendado (aumento baseado na dose)
-    incremento_n = min(dose_n / 200, 0.40)  # máximo 40% de aumento
-    cenario_adubacao = base * (0.75 + incremento_n * 0.5)
-    
-    # Com N + bioinsumos
-    incremento_bio = 0.10 if usa_bioinsumos == 'Sim' else 0.05
-    cenario_adubacao_bio = cenario_adubacao * (1 + incremento_bio)
-    
-    # Com manejo integrado (tudo otimizado)
-    incremento_integrado = 0.15 + (0.05 if manejo_solo == 'Plantio direto' else 0)
-    cenario_ideal = cenario_adubacao_bio * (1 + incremento_integrado)
-    
-    # Limitar valores para não ficarem abaixo do mínimo
-    cenario_sem_manejo = max(cenario_sem_manejo, base * 0.50)
-    cenario_adubacao = max(cenario_adubacao, base * 0.70)
-    cenario_adubacao_bio = max(cenario_adubacao_bio, base * 0.80)
-    cenario_ideal = max(cenario_ideal, base * 0.90)
-    
-    # Criar dados para o gráfico
-    dados = {
-        'Cenário': [
-            'Sem manejo otimizado', 
-            'Com adubação N', 
-            'Com adubação + bioinsumos', 
-            'Com manejo integrado'
-        ],
-        'Produtividade (kg/ha)': [
-            cenario_sem_manejo, 
-            cenario_adubacao, 
-            cenario_adubacao_bio, 
-            cenario_ideal
-        ],
-        'Cor': ['#d32f2f', '#ff9800', '#4caf50', '#2e7d32']
-    }
-    
-    df_grafico = pd.DataFrame(dados)
-    
-    # Criar gráfico com Plotly
-    fig = px.bar(
-        df_grafico,
-        x='Cenário',
-        y='Produtividade (kg/ha)',
-        text='Produtividade (kg/ha)',
-        title=f'Estimativa educativa de produtividade - {cultura}',
-        color='Cor',
-        color_discrete_map='identity'
-    )
-    
-    # Atualizar barras
-    fig.update_traces(
-        texttemplate='%{text:.0f}',
-        textposition='outside',
-        textfont=dict(size=11, color='black', weight='bold'),
-        hovertemplate='<b>%{x}</b><br>Produtividade: %{text:.0f} kg/ha<extra></extra>'
-    )
-    
-    # Atualizar layout
-    fig.update_layout(
-        height=450,
-        xaxis_title='Cenário de manejo',
-        yaxis_title='Produtividade estimada (kg/ha)',
-        showlegend=False,
-        margin=dict(l=20, r=20, t=60, b=80),
-        plot_bgcolor='white',
-        yaxis=dict(
-            gridcolor='#e0e0e0',
-            griddash='dash',
-            title_font=dict(size=13, weight='bold'),
-            tickfont=dict(size=11)
-        ),
-        xaxis=dict(
-            title_font=dict(size=13, weight='bold'),
-            tickfont=dict(size=11)
-        ),
-        title_font=dict(size=16, weight='bold')
-    )
-    
-    # Adicionar anotação
-    fig.add_annotation(
-        text='* Valores são simulações educativas, não substituem avaliações de campo',
-        xref='paper',
-        yref='paper',
-        x=0.5,
-        y=-0.15,
-        showarrow=False,
-        font=dict(size=10, color='#666666', style='italic')
-    )
-    
-    return fig
-
 def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_fertilizante, bioinsumo, manejo, explicacao):
     """
     Cria um resumo em card com as principais recomendações.
@@ -704,13 +569,26 @@ with tab1:
             
             st.caption("Formato: graus decimais (ex: -22.9068, -47.0616)")
             
-            # Exibir status da API
-            if GOOGLE_MAPS_API_KEY != "INSERIR_CHAVE_API_AQUI":
-                st.success("✅ Chave API de mapas configurada")
-                st.caption("🔑 API Key: " + GOOGLE_MAPS_API_KEY[:8] + "..." + GOOGLE_MAPS_API_KEY[-4:])
+            # Exibir status das APIs
+            st.markdown("---")
+            st.markdown("**🔑 Status das APIs:**")
+            
+            if GOOGLE_MAPS_API_KEY != "INSERIR_CHAVE_GOOGLE_MAPS_AQUI":
+                st.success("✅ Google Maps API configurada")
             else:
-                st.warning("⚠️ Chave API não configurada")
-                st.caption("Para integrar com Google Maps, insira a chave no código (variável GOOGLE_MAPS_API_KEY)")
+                st.warning("⚠️ Google Maps API não configurada")
+            
+            if OPENWEATHER_API_KEY != "INSERIR_CHAVE_OPENWEATHER_AQUI":
+                st.success("✅ OpenWeather API configurada")
+            else:
+                st.warning("⚠️ OpenWeather API não configurada")
+            
+            if GEOAPIFY_API_KEY != "INSERIR_CHAVE_GEOAPIFY_AQUI":
+                st.success("✅ Geoapify API configurada")
+            else:
+                st.warning("⚠️ Geoapify API não configurada")
+            
+            st.caption("Configure as chaves no código (variáveis GOOGLE_MAPS_API_KEY, OPENWEATHER_API_KEY e GEOAPIFY_API_KEY)")
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -1197,28 +1075,7 @@ with tab3:
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # 3. Gráfico de desempenho
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("📊 3. Projeção de Desempenho")
-        
-        try:
-            fig = gerar_grafico_performance(
-                dose_n=dose_n,
-                cultura=cultura_escolhida,
-                produtividade=produtividade,
-                ambiente=ambiente,
-                manejo_solo=manejo_solo,
-                usa_bioinsumos=usa_bioinsumos
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.warning("⚠️ Não foi possível gerar o gráfico de desempenho.")
-            st.caption(f"Detalhe técnico: {e}")
-        
-        st.caption("* Os dados apresentados no gráfico são simulações educativas baseadas em incrementos percentuais estimados.")
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # 4. Resumo Final
+        # 3. Resumo Final
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         bio_principal = ', '.join(bio_recomendacao['microrganismos'][:2])
@@ -1364,7 +1221,6 @@ with tab4:
         <ul>
             <li>As recomendações são <strong>estimativas educativas</strong>, não substituem avaliação técnica profissional.</li>
             <li>Quando não há análise de solo, o sistema utiliza <strong>valores médios simulados</strong>.</li>
-            <li>O gráfico de desempenho é uma <strong>projeção didática</strong> baseada em incrementos percentuais estimados.</li>
             <li>Para uso real, consulte um <strong>engenheiro agrônomo</strong> e siga boletins técnicos regionais.</li>
             <li>O sistema não considera todos os fatores de campo (clima, pragas, doenças, etc.).</li>
             <li>Os valores são baseados em <strong>regras simplificadas</strong> e podem não refletir condições específicas.</li>
@@ -1397,7 +1253,6 @@ with tab4:
             <li><strong>Cálculo da dose de N:</strong> A dose recomendada é calculada com base na cultura, produtividade esperada, ambiente, cultura anterior, textura do solo e teor de matéria orgânica.</li>
             <li><strong>Recomendação do fertilizante:</strong> O sistema sugere o fertilizante mais adequado com base na cultura, dose de N e características do solo.</li>
             <li><strong>Bioinsumos:</strong> Recomendação de microrganismos benéficos específicos para cada cultura.</li>
-            <li><strong>Projeção educativa:</strong> Gráfico mostrando estimativas de produtividade em diferentes cenários de manejo.</li>
         </ol>
         <p style="margin-top: 10px; color: #1b5e20;"><strong>✅ Nota:</strong> Todas as recomendações são baseadas em regras agronômicas simplificadas e têm caráter educativo.</p>
     </div>
@@ -1425,12 +1280,14 @@ with tab4:
         <ul>
             <li><strong>Google Maps API:</strong> {} </li>
             <li><strong>OpenWeather API:</strong> {} </li>
+            <li><strong>Geoapify API:</strong> {} </li>
         </ul>
         <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">* APIs configuradas para futuras integrações</p>
     </div>
     """.format(
-        "✅ Configurada" if GOOGLE_MAPS_API_KEY != "INSERIR_CHAVE_API_AQUI" else "⚠️ Não configurada",
-        "✅ Configurada" if OPENWEATHER_API_KEY != "INSERIR_CHAVE_API_AQUI" else "⚠️ Não configurada"
+        "✅ Configurada" if GOOGLE_MAPS_API_KEY != "INSERIR_CHAVE_GOOGLE_MAPS_AQUI" else "⚠️ Não configurada",
+        "✅ Configurada" if OPENWEATHER_API_KEY != "INSERIR_CHAVE_OPENWEATHER_AQUI" else "⚠️ Não configurada",
+        "✅ Configurada" if GEOAPIFY_API_KEY != "INSERIR_CHAVE_GEOAPIFY_AQUI" else "⚠️ Não configurada"
     ), unsafe_allow_html=True)
 
 # ===================== RODAPÉ =====================
