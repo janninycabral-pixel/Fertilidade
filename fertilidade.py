@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import altair as alt
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 import requests
 import io
@@ -432,16 +434,25 @@ def recomendar_bioinsumos(cultura, usa_bioinsumos, bioinsumos_selecionados):
 
 def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente, manejo_solo, usa_bioinsumos):
     """
-    Gera gráfico educacional comparando cenários de manejo usando Altair.
-    Garante que o gráfico sempre seja gerado mesmo com valores variáveis.
+    Gera gráfico educacional comparando cenários de manejo usando Plotly.
+    Mais estável no Streamlit Cloud.
     """
     # Garantir que os valores são numéricos
     try:
-        dose_n = float(dose_n) if dose_n else 80
-        produtividade = float(produtividade) if produtividade else 3000
+        dose_n = float(dose_n) if dose_n is not None and dose_n != '' else 80
     except (ValueError, TypeError):
         dose_n = 80
+    
+    try:
+        produtividade = float(produtividade) if produtividade is not None and produtividade != '' else 3000
+    except (ValueError, TypeError):
         produtividade = 3000
+    
+    if produtividade <= 0:
+        produtividade = 3000
+    
+    if dose_n <= 0:
+        dose_n = 80
     
     # Estimativa de produtividade base (kg/ha)
     bases_produtividade = {
@@ -484,82 +495,77 @@ def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente, manejo_s
     cenario_adubacao_bio = max(cenario_adubacao_bio, base * 0.80)
     cenario_ideal = max(cenario_ideal, base * 0.90)
     
-    # Criar DataFrame para o gráfico
-    dados = pd.DataFrame({
-        'Cenário': ['Sem manejo otimizado', 'Com adubação N', 'Com adubação + bioinsumos', 'Com manejo integrado'],
-        'Produtividade (kg/ha)': [cenario_sem_manejo, cenario_adubacao, cenario_adubacao_bio, cenario_ideal],
+    # Criar dados para o gráfico
+    dados = {
+        'Cenário': [
+            'Sem manejo otimizado', 
+            'Com adubação N', 
+            'Com adubação + bioinsumos', 
+            'Com manejo integrado'
+        ],
+        'Produtividade (kg/ha)': [
+            cenario_sem_manejo, 
+            cenario_adubacao, 
+            cenario_adubacao_bio, 
+            cenario_ideal
+        ],
         'Cor': ['#d32f2f', '#ff9800', '#4caf50', '#2e7d32']
-    })
+    }
     
-    # Criar gráfico de barras
-    chart = alt.Chart(dados).mark_bar(
-        cornerRadiusTopLeft=5,
-        cornerRadiusTopRight=5,
-        size=50
-    ).encode(
-        x=alt.X('Cenário', sort=None, axis=alt.Axis(labelAngle=0, labelFontSize=12)),
-        y=alt.Y('Produtividade (kg/ha)', 
-                 axis=alt.Axis(grid=True, gridColor='#e0e0e0', titleFontSize=13, titleFontWeight='bold'),
-                 scale=alt.Scale(domain=[0, max(dados['Produtividade (kg/ha)']) * 1.15])),
-        color=alt.Color('Cor', scale=None, legend=None),
-        tooltip=['Cenário', 'Produtividade (kg/ha)']
+    df_grafico = pd.DataFrame(dados)
+    
+    # Criar gráfico com Plotly
+    fig = px.bar(
+        df_grafico,
+        x='Cenário',
+        y='Produtividade (kg/ha)',
+        text='Produtividade (kg/ha)',
+        title=f'Estimativa educativa de produtividade - {cultura}',
+        color='Cor',
+        color_discrete_map='identity'
     )
     
-    # Criar camada de texto com os valores
-    text = alt.Chart(dados).mark_text(
-        align='center',
-        baseline='bottom',
-        dy=-5,
-        fontSize=11,
-        fontWeight='bold',
-        color='black'
-    ).encode(
-        x=alt.X('Cenário', sort=None),
-        y=alt.Y('Produtividade (kg/ha)'),
-        text=alt.Text('Produtividade (kg/ha):Q', format='.0f')
+    # Atualizar barras
+    fig.update_traces(
+        texttemplate='%{text:.0f}',
+        textposition='outside',
+        textfont=dict(size=11, color='black', weight='bold'),
+        hovertemplate='<b>%{x}</b><br>Produtividade: %{text:.0f} kg/ha<extra></extra>'
     )
     
-    # Criar DataFrame para anotação
-    annotation_data = pd.DataFrame({
-        'x': [0.5],
-        'y': [-0.10],
-        'texto': ['* Valores são simulações educativas, não substituem avaliações de campo']
-    })
-    
-    # Criar camada de anotação
-    annotation = alt.Chart(annotation_data).mark_text(
-        align='center',
-        fontSize=10,
-        color='#666666',
-        fontStyle='italic'
-    ).encode(
-        x=alt.X('x:Q', scale=alt.Scale(domain=[0, 1]), axis=None),
-        y=alt.Y('y:Q', scale=alt.Scale(domain=[-0.15, 1]), axis=None),
-        text='texto:N'
-    )
-    
-    # Combinar todas as camadas usando alt.layer
-    final_chart = alt.layer(
-        chart,
-        text,
-        annotation
-    ).properties(
-        title=alt.Title(
-            f'Estimativa educativa de produtividade - {cultura}',
-            fontSize=16,
-            fontWeight='bold'
+    # Atualizar layout
+    fig.update_layout(
+        height=450,
+        xaxis_title='Cenário de manejo',
+        yaxis_title='Produtividade estimada (kg/ha)',
+        showlegend=False,
+        margin=dict(l=20, r=20, t=60, b=80),
+        plot_bgcolor='white',
+        yaxis=dict(
+            gridcolor='#e0e0e0',
+            griddash='dash',
+            title_font=dict(size=13, weight='bold'),
+            tickfont=dict(size=11)
         ),
-        width=700,
-        height=450
-    ).configure_view(
-        strokeWidth=0
-    ).configure_axis(
-        labelFontSize=12,
-        titleFontSize=13,
-        titleFontWeight='bold'
+        xaxis=dict(
+            title_font=dict(size=13, weight='bold'),
+            tickfont=dict(size=11)
+        ),
+        title_font=dict(size=16, weight='bold')
     )
     
-    return final_chart
+    # Adicionar anotação
+    fig.add_annotation(
+        text='* Valores são simulações educativas, não substituem avaliações de campo',
+        xref='paper',
+        yref='paper',
+        x=0.5,
+        y=-0.15,
+        showarrow=False,
+        font=dict(size=10, color='#666666', style='italic')
+    )
+    
+    return fig
 
 def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_fertilizante, bioinsumo, manejo, explicacao):
     """
@@ -1009,7 +1015,6 @@ with tab3:
         col1, col2 = st.columns(2)
         
         with col1:
-            # CORREÇÃO: Removida a atribuição manual do session_state
             cultura_escolhida = st.selectbox(
                 "Cultura que pretende cultivar*",
                 ["Milho", "Trigo", "Soja", "Feijão", "Sorgo", "Algodão"],
@@ -1198,15 +1203,19 @@ with tab3:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("📊 3. Projeção de Desempenho")
         
-        chart = gerar_grafico_performance(
-            dose_n, 
-            cultura_escolhida, 
-            produtividade, 
-            ambiente,
-            manejo_solo,
-            usa_bioinsumos
-        )
-        st.altair_chart(chart, use_container_width=True)
+        try:
+            fig = gerar_grafico_performance(
+                dose_n=dose_n,
+                cultura=cultura_escolhida,
+                produtividade=produtividade,
+                ambiente=ambiente,
+                manejo_solo=manejo_solo,
+                usa_bioinsumos=usa_bioinsumos
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.warning("⚠️ Não foi possível gerar o gráfico de desempenho.")
+            st.caption(f"Detalhe técnico: {e}")
         
         st.caption("* Os dados apresentados no gráfico são simulações educativas baseadas em incrementos percentuais estimados.")
         st.markdown('</div>', unsafe_allow_html=True)
