@@ -1,9 +1,13 @@
+pip install -r requirements.txt
+streamlit run app.py
 # app.py
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
+import altair as alt
+from datetime import datetime
+import requests
+import io
 import random
 import math
 
@@ -137,6 +141,7 @@ st.markdown("""
 
 # ===================== CHAVE API (FUTURA) =====================
 GOOGLE_MAPS_API_KEY = "INSERIR_CHAVE_API_AQUI"
+OPENWEATHER_API_KEY = "INSERIR_CHAVE_API_AQUI"
 
 # ===================== FUNÇÕES DE APOIO =====================
 def init_session_state():
@@ -364,7 +369,7 @@ def recomendar_bioinsumos(cultura, usa_bioinsumos, bioinsumos_selecionados):
 
 def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
     """
-    Gera gráfico educacional comparando cenários de manejo usando Matplotlib.
+    Gera gráfico educacional comparando cenários de manejo usando Altair.
     """
     # Estimativa de produtividade base (kg/ha)
     bases_produtividade = {
@@ -395,39 +400,74 @@ def gerar_grafico_performance(dose_n, cultura, produtividade, ambiente):
         cenario_adubacao *= 1.05
         cenario_adubacao_bio *= 1.05
     
-    cenarios = ['Sem manejo\notimizado', 'Com adubação\nN', 'Com adubação +\nbioinsumos', 'Com manejo\nintegrado']
-    valores = [cenario_sem_manejo, cenario_adubacao, cenario_adubacao_bio, cenario_ideal]
+    # Criar DataFrame para o gráfico
+    dados = pd.DataFrame({
+        'Cenário': ['Sem manejo otimizado', 'Com adubação N', 'Com adubação + bioinsumos', 'Com manejo integrado'],
+        'Produtividade (kg/ha)': [cenario_sem_manejo, cenario_adubacao, cenario_adubacao_bio, cenario_ideal],
+        'Cor': ['#d32f2f', '#ff9800', '#4caf50', '#2e7d32']
+    })
     
-    # Criar gráfico com Matplotlib
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Criar gráfico com Altair
+    chart = alt.Chart(dados).mark_bar(
+        cornerRadiusTopLeft=5,
+        cornerRadiusTopRight=5,
+        size=50
+    ).encode(
+        x=alt.X('Cenário', sort=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('Produtividade (kg/ha)', 
+                 axis=alt.Axis(grid=True, gridColor='#e0e0e0'),
+                 scale=alt.Scale(domain=[0, max(dados['Produtividade (kg/ha)']) * 1.15])),
+        color=alt.Color('Cor', scale=None, legend=None),
+        tooltip=['Cenário', 'Produtividade (kg/ha)']
+    ).properties(
+        title=alt.Title(
+            f'Estimativa educativa de produtividade - {cultura}',
+            fontSize=16,
+            fontWeight='bold'
+        ),
+        width=600,
+        height=400
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=13,
+        titleFontWeight='bold'
+    ).configure_view(
+        strokeWidth=0
+    )
     
-    # Cores
-    cores = ['#d32f2f', '#ff9800', '#4caf50', '#2e7d32']
+    # Adicionar rótulos de valor
+    text = chart.mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5,
+        fontSize=11,
+        fontWeight='bold'
+    ).encode(
+        text=alt.Text('Produtividade (kg/ha):Q', format='.0f')
+    )
     
-    # Criar barras
-    bars = ax.bar(cenarios, valores, color=cores, edgecolor='white', linewidth=2)
+    # Adicionar anotação
+    annotation = alt.Chart(pd.DataFrame({
+        'x': [0.5],
+        'y': [-0.12],
+        'text': ['* Valores são simulações educativas, não substituem avaliações de campo']
+    })).mark_text(
+        align='center',
+        fontSize=10,
+        color='#666666',
+        fontStyle='italic'
+    ).encode(
+        x='x:Q',
+        y='y:Q',
+        text='text:N'
+    )
     
-    # Adicionar valores nas barras
-    for bar, value in zip(bars, valores):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + height*0.02,
-                f'{value:,.0f} kg/ha', ha='center', va='bottom', fontsize=10, fontweight='bold')
+    final_chart = (chart + text + annotation).properties(
+        width=700,
+        height=450
+    )
     
-    # Configurar gráfico
-    ax.set_ylabel('Produtividade estimada (kg/ha)', fontsize=12, fontweight='bold')
-    ax.set_title(f'Estimativa educativa de produtividade - {cultura}', fontsize=14, fontweight='bold', pad=20)
-    ax.grid(True, axis='y', linestyle='--', alpha=0.3, color='#cccccc')
-    ax.set_axisbelow(True)
-    ax.set_ylim(0, max(valores) * 1.15)
-    
-    # Adicionar legenda personalizada
-    ax.text(0.02, -0.15, '* Valores são simulações educativas, não substituem avaliações de campo',
-            transform=ax.transAxes, fontsize=10, color='#666666', style='italic')
-    
-    # Ajustar layout
-    plt.tight_layout()
-    
-    return fig
+    return final_chart
 
 def criar_resumo_recomendacao(cultura, produtividade, dose_n, fertilizante, qtd_fertilizante, bioinsumo, manejo):
     """
@@ -1026,8 +1066,8 @@ with tab3:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("📊 3. Projeção de Desempenho")
         
-        fig = gerar_grafico_performance(dose_n, cultura_escolhida, produtividade, ambiente)
-        st.pyplot(fig)
+        chart = gerar_grafico_performance(dose_n, cultura_escolhida, produtividade, ambiente)
+        st.altair_chart(chart, use_container_width=True)
         
         st.caption("* Os dados apresentados no gráfico são simulações educativas baseadas em incrementos percentuais estimados.")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1084,13 +1124,13 @@ with tab3:
             ⚠️ Esta recomendação é uma estimativa educativa.
             Para uso real, consulte um engenheiro agrônomo.
             
-            Data de geração: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}
+            Data de geração: {datetime.now().strftime('%d/%m/%Y %H:%M')}
             """
             
             st.download_button(
                 label="💾 Baixar como TXT",
                 data=relatorio,
-                file_name=f"recomendacao_{cultura_escolhida}_{pd.Timestamp.now().strftime('%Y%m%d')}.txt",
+                file_name=f"recomendacao_{cultura_escolhida}_{datetime.now().strftime('%Y%m%d')}.txt",
                 mime="text/plain",
                 use_container_width=True
             )
@@ -1221,6 +1261,21 @@ with tab4:
         <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">* Para dados precisos, recomenda-se realizar análise de solo específica.</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # API Status
+    st.markdown("""
+    <div class="card">
+        <h4>🔌 Status das APIs</h4>
+        <ul>
+            <li><strong>Google Maps API:</strong> {} </li>
+            <li><strong>OpenWeather API:</strong> {} </li>
+        </ul>
+        <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">* APIs configuradas para futuras integrações</p>
+    </div>
+    """.format(
+        "✅ Configurada" if GOOGLE_MAPS_API_KEY != "INSERIR_CHAVE_API_AQUI" else "⚠️ Não configurada",
+        "✅ Configurada" if OPENWEATHER_API_KEY != "INSERIR_CHAVE_API_AQUI" else "⚠️ Não configurada"
+    ), unsafe_allow_html=True)
 
 # ===================== RODAPÉ =====================
 st.markdown("---")
